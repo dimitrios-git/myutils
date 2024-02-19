@@ -1,0 +1,64 @@
+#!/bin/bash
+
+# Function to check the exit status of the command and print a message
+check_status() {
+    if [ $? -eq 0 ]; then
+        echo -e "\033[32m[SUCCESS]\033[0m $1"
+    else
+        echo -e "\033[31m[ERROR]\033[0m $1 failed"
+        exit 1
+    fi
+}
+
+# Function for countdown
+countdown() {
+    local i
+    for i in {5..1}; do
+        echo -ne "\033[033mPress CTL+C to cancel - Sleeping for $i seconds...\033[0m\033[0K\r"
+        sleep 1
+    done
+    echo -e "\033[033mPress CTL+C to cancel - Sleeping for 0 seconds...\033[0m\033[0K"
+}
+
+# Function to ensure the Backups directory is protected
+protect_backups() {
+    echo "Reapplying immutable flag to the Backups directory"
+    sudo chattr +i /home/dimitrios/Backups
+}
+
+# Set trap to protect the Backups directory on script exit
+trap protect_backups EXIT
+
+# Start of the backup and upgrade process
+echo "Full system backup and upgrade started on $(date --rfc-3339=seconds)"
+
+# Remove immutable flag to allow backup
+echo "Removing immutable flag from the Backups directory"
+sudo chattr -i /home/dimitrios/Backups
+
+# Backup operations...
+echo "Backup of /home starting"
+countdown
+echo "Backup of /home started on $(date --rfc-3339=seconds)"
+sudo rsync -aAXHS --stats --info=progress2 --ignore-errors --no-compress --inplace --delete --exclude={"dimitrios/Backups/*","dimitrios/Mounts/*","dimitrios/Cloud/*"} /home/* /home/dimitrios/Backups/vgd-home_backup/
+check_status "Backup of /home"
+echo "Backup of /home completed $(date --rfc-3339=seconds)"
+echo "Backup of / starting"
+countdown
+echo "Backup of / started on $(date --rfc-3339=seconds)"
+sudo rsync -aAXHS --stats --info=progress2 --ignore-errors --no-compress --inplace --delete --exclude={"/dev/*","/proc/*","/sys/*","/tmp/*","/run/*","/mnt/*","/media/*","/lost+found","/snap/*","/home/*","/var/lib/lxcfs/proc/*","/var/lib/lxcfs/sys/*","/var/lib/plexmediaserver"} / /home/dimitrios/Backups/vgd-root_backup/
+check_status "Backup of /"
+echo "Backup of / completed on $(date --rfc-3339=seconds)"
+echo "System upgrade starting"
+countdown
+echo "System upgrade started on $(date --rfc-3339=seconds)"
+sudo apt update -y
+check_status "apt update"
+sudo apt upgrade -y
+check_status "apt upgrade"
+sudo apt autoremove -y
+check_status "apt autoremove"
+sudo snap refresh
+check_status "snap refresh"
+echo "System upgrade completed on $(date --rfc-3339=seconds)"
+
